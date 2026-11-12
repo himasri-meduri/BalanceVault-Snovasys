@@ -1,0 +1,239 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CUSTOMER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+  LOCKED
+}
+
+enum OnboardingStatus {
+  DRAFT
+  PENDING
+  NEEDS_INFORMATION
+  APPROVED
+  REJECTED
+}
+
+enum AccountKind {
+  CUSTOMER
+  SYSTEM_ISSUANCE
+}
+
+enum AccountStatus {
+  PENDING
+  ACTIVE
+  FROZEN
+  CLOSED
+}
+
+enum JournalTransactionType {
+  DEMO_TRANSFER
+  REVERSAL
+  ADJUSTMENT
+}
+
+enum JournalTransactionStatus {
+  POSTED
+  REVERSED
+}
+
+enum EntryDirection {
+  DEBIT
+  CREDIT
+}
+
+enum ActorType {
+  USER
+  SYSTEM
+  ANONYMOUS
+}
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  email        String     @unique
+  passwordHash String
+  fullName     String
+  role         UserRole   @default(CUSTOMER)
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  sessions               Session[]
+  onboardingApplication  OnboardingApplication? @relation("CustomerOnboarding")
+  reviewedApplications   OnboardingApplication[] @relation("ReviewerOnboarding")
+  accounts               Account[]
+  initiatedTransactions  JournalTransaction[]
+  idempotencyRecords     IdempotencyRecord[]
+  auditEvents            AuditEvent[]
+  bootstrapState         SystemBootstrapState?
+
+  @@index([role])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Session {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  tokenHash  String    @unique
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime
+  lastSeenAt DateTime  @default(now())
+  revokedAt  DateTime?
+  userAgent  String?
+  ipHash     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model OnboardingApplication {
+  id                     String           @id @default(uuid()) @db.Uuid
+  userId                 String           @unique @db.Uuid
+  status                 OnboardingStatus @default(PENDING)
+  contactReference       String?
+  city                   String?
+  country                String?
+  accountPurpose         String?
+  acceptedSyntheticTerms Boolean          @default(false)
+  submittedAt            DateTime?
+  reviewedAt             DateTime?
+  reviewedByUserId       String?          @db.Uuid
+  reviewReason           String?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  user       User  @relation("CustomerOnboarding", fields: [userId], references: [id], onDelete: Restrict)
+  reviewedBy User? @relation("ReviewerOnboarding", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([reviewedByUserId])
+}
+
+model Account {
+  id              String        @id @default(uuid()) @db.Uuid
+  publicReference String        @unique
+  kind            AccountKind   @default(CUSTOMER)
+  ownerUserId     String?       @db.Uuid
+  accountName     String
+  currency        String        @default("INR")
+  status          AccountStatus @default(ACTIVE)
+  balanceMinor    BigInt        @default(0)
+  version         Int           @default(0)
+  statusReason    String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  owner          User?          @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  journalEntries JournalEntry[]
+
+  @@index([ownerUserId])
+  @@index([status])
+  @@index([ownerUserId, status])
+  @@index([kind])
+}
+
+model JournalTransaction {
+  id                      String                   @id @default(uuid()) @db.Uuid
+  publicReference         String                   @unique
+  type                    JournalTransactionType
+  status                  JournalTransactionStatus @default(POSTED)
+  currency                String                   @default("INR")
+  description             String
+  idempotencyKey          String?
+  initiatedByUserId       String?                  @db.Uuid
+  reversalOfTransactionId String?                  @unique @db.Uuid
+  metadata                Json?
+  createdAt               DateTime                 @default(now())
+
+  initiatedBy           User?                @relation(fields: [initiatedByUserId], references: [id], onDelete: Restrict)
+  reversalOfTransaction JournalTransaction?  @relation("TransactionReversal", fields: [reversalOfTransactionId], references: [id], onDelete: Restrict)
+  reversedByTransaction JournalTransaction?  @relation("TransactionReversal")
+  entries               JournalEntry[]
+  idempotencyRecords    IdempotencyRecord[]
+
+  @@index([initiatedByUserId, createdAt])
+  @@index([createdAt])
+  @@index([type])
+}
+
+model JournalEntry {
+  id            String         @id @default(uuid()) @db.Uuid
+  transactionId String         @db.Uuid
+  accountId     String         @db.Uuid
+  direction     EntryDirection
+  amountMinor   BigInt
+  currency      String         @default("INR")
+  createdAt     DateTime       @default(now())
+
+  transaction JournalTransaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  account     Account            @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([accountId, createdAt])
+  @@index([transactionId])
+}
+
+model IdempotencyRecord {
+  id             String   @id @default(uuid()) @db.Uuid
+  actorUserId    String   @db.Uuid
+  scope          String
+  key            String
+  requestHash    String
+  responseStatus Int
+  responseBody   Json
+  transactionId  String?  @db.Uuid
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+
+  actor       User                @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  transaction JournalTransaction? @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+
+  @@unique([actorUserId, scope, key])
+  @@index([expiresAt])
+}
+
+model AuditEvent {
+  id          String    @id @default(uuid()) @db.Uuid
+  actorUserId String?   @db.Uuid
+  actorType   ActorType
+  action      String
+  entityType  String
+  entityId    String
+  occurredAt  DateTime  @default(now())
+  requestId   String
+  reason      String?
+  beforeState Json?
+  afterState  Json?
+  ipHash      String?
+
+  actor User? @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@index([entityType, entityId])
+  @@index([action])
+}
+
+model SystemBootstrapState {
+  id          String   @id
+  completedAt DateTime @default(now())
+  adminUserId String   @unique @db.Uuid
+  note        String
+
+  adminUser User @relation(fields: [adminUserId], references: [id], onDelete: Restrict)
+}
