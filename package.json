@@ -1,0 +1,44 @@
+{
+  "name": "balancevault",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BalanceVault — secure account-management and auditable synthetic-money ledger demo",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace=@balancevault/api",
+    "dev:web": "npm run dev --workspace=@balancevault/web",
+    "build": "npm run build --workspace=@balancevault/api && npm run build --workspace=@balancevault/web",
+    "typecheck": "npm run typecheck --workspace=@balancevault/api && npm run typecheck --workspace=@balancevault/web",
+    "lint": "eslint apps prisma scripts",
+    "test": "npm run test:scripts && npm run test --workspace=@balancevault/api && npm run test --workspace=@balancevault/web",
+    "test:scripts": "node --test scripts/*.test.mjs",
+    "test:integration": "npm run test:integration --workspace=@balancevault/api",
+    "bootstrap:admin": "npm run bootstrap:admin --workspace=@balancevault/api",
+    "prisma:generate": "npx prisma generate --schema=prisma/schema.prisma",
+    "prisma:migrate:deploy": "node scripts/run-prisma-migrate.mjs deploy",
+    "prisma:migrate:status": "node scripts/run-prisma-migrate.mjs status",
+    "prisma:seed": "node --import tsx prisma/seed.ts",
+    "db:inspect-roles": "node scripts/inspect-db-roles.mjs"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.0",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "prisma": "^6.19.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.4"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  }
+}

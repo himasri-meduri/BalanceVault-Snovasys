@@ -1,0 +1,46 @@
+# Render Blueprint for BalanceVault Express API (@balancevault/api)
+# NOTE:
+# - Never commit real secrets here; all sensitive values use `sync: false` placeholders.
+# - Run database migrations out-of-band using DIRECT_URL (schema-owner port 5432),
+#   and configure DATABASE_URL with the least-privilege `app_runtime` role.
+
+services:
+  - type: web
+    name: balancevault-api
+    runtime: node
+    plan: free
+    region: singapore
+    autoDeploy: true
+    buildCommand: npm ci --include=dev && npm run prisma:generate && npm run build --workspace=@balancevault/api
+    startCommand: node apps/api/dist/server.js
+    healthCheckPath: /api/ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4000"
+      - key: TRUST_PROXY
+        value: "1"
+      - key: LOG_LEVEL
+        value: info
+      - key: COOKIE_SECURE
+        value: "true"
+      # Set COOKIE_SAME_SITE=none when Vercel (*.vercel.app) and Render (*.onrender.com)
+      # are cross-site origins; use "lax" only if both share one registrable apex domain.
+      - key: COOKIE_SAME_SITE
+        value: none
+      - key: SESSION_TTL_HOURS
+        value: "12"
+      - key: SESSION_IDLE_MINUTES
+        value: "120"
+      # Configure these exact secrets / URLs in Render Dashboard (never commit values):
+      - key: APP_ORIGIN
+        sync: false
+      - key: API_PUBLIC_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
